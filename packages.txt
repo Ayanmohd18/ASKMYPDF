@@ -1,0 +1,5 @@
+libcairo2
+ghostscript
+libffi-dev
+ffmpeg
+python3-tk
