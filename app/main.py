@@ -1,10 +1,22 @@
 import streamlit as st
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+from app.styles import get_css
+from app.ingestion import ingest_file as ingest_pdf
+from app.vector_store import (initialize, add_chunks, 
+  get_all_doc_names, get_chunk_count, clear)
+from app.retriever import retrieve
+from app.generator import generate
+from app.memory import ConversationMemory
+from app.monitor import get_stats, get_tracker
 import tempfile
 import datetime
-from pathlib import Path
 
-# MUST BE THE FIRST STREAMLIT COMMAND
+load_dotenv()
+
+# ─── PAGE CONFIG (MUST BE FIRST ST CALL) ────────────────
+
 st.set_page_config(
     page_title="AskMyPDF",
     page_icon="📄",
@@ -12,468 +24,444 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Premium Custom CSS ---
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+# ─── SESSION STATE INITIALIZATION ───────────────────────
 
-/* Global Styles & Typography */
-html, body, [class*="css"], .stApp {
-    font-family: 'Outfit', sans-serif !important;
-}
-
-/* Vibrant & Modern Accent Gradients */
-:root {
-    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --shadow-color: rgba(99, 102, 241, 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        --glass-bg: rgba(15, 23, 42, 0.6);
-        --glass-border: rgba(255, 255, 255, 0.08);
-        --shadow-color: rgba(0, 0, 0, 0.3);
-    }
-}
-
-/* Dynamic Ambient Background Glow */
-.stApp {
-    background: radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.1), transparent 40%),
-                radial-gradient(circle at 10% 90%, rgba(168, 85, 247, 0.08), transparent 40%);
-}
-
-/* Smooth State Transitions */
-* {
-    transition: all 0.3s ease-in-out;
-}
-
-/* Glassmorphic Sidebar */
-[data-testid="stSidebar"] {
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(12px) !important;
-    border-right: 1px solid var(--glass-border) !important;
-}
-
-/* Uber-Aesthetic Premium Buttons */
-.stButton > button {
-    background: var(--accent-gradient) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 12px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.5px !important;
-    padding: 12px 24px !important;
-    box-shadow: 0 4px 15px var(--shadow-color) !important;
-}
-
-.stButton > button:hover {
-    transform: translateY(-3px) scale(1.02) !important;
-    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4) !important;
-}
-
-/* Input Chat Box Glow */
-.stChatInputContainer {
-    border-radius: 24px !important;
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid var(--glass-border) !important;
-    box-shadow: 0 10px 30px var(--shadow-color) !important;
-}
-
-.stChatInputContainer:focus-within {
-    border-color: #6366f1 !important;
-    box-shadow: 0 10px 35px rgba(99, 102, 241, 0.25) !important;
-}
-
-/* Chat Bubbles */
-.stChatMessage {
-    border-radius: 18px !important;
-    border: 1px solid var(--glass-border) !important;
-    padding: 16px !important;
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(10px) !important;
-    margin-bottom: 16px !important;
-    box-shadow: 0 4px 15px var(--shadow-color) !important;
-}
-
-/* Expanders (Sources) */
-.streamlit-expanderHeader {
-    background: var(--glass-bg) !important;
-    border-radius: 12px !important;
-    border: 1px solid var(--glass-border) !important;
-    font-weight: 600 !important;
-}
-
-/* Smooth Micro-Animations for Flashcards */
-.flashcard {
-    perspective: 1000px;
-    margin-bottom: 20px;
-}
-.flashcard-inner {
-    position: relative;
-    width: 100%;
-    height: 200px;
-    text-align: center;
-    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    transform-style: preserve-3d;
-    cursor: pointer;
-}
-.flashcard:hover .flashcard-inner {
-    transform: rotateY(180deg);
-}
-.flashcard-front, .flashcard-back {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    backface-visibility: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    border-radius: 20px;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 10px 25px var(--shadow-color);
-    backdrop-filter: blur(12px);
-}
-.flashcard-front {
-    background: var(--glass-bg);
-    font-weight: 600;
-    font-size: 1.3em;
-    color: inherit;
-}
-.flashcard-back {
-    background: var(--accent-gradient);
-    color: white;
-    transform: rotateY(180deg);
-    font-size: 1.1em;
-}
-</style>
-
-""", unsafe_allow_html=True)
-
-
-from app.monitor import get_stats, get_tracker
-from app.memory import ConversationMemory
-from app.retriever import retrieve, RetrievedChunk
-from app.generator import generate
-from app import generator
-from app import ingestion
-from app import vector_store
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Initialize vector store
-index_dir = Path(os.getenv("INDEX_DIR", "data/indexes"))
-index_dir.mkdir(parents=True, exist_ok=True)
-vector_store.initialize(index_dir)
-
-# Initialize Session State
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "memory" not in st.session_state:
     st.session_state.memory = ConversationMemory()
 if "backend" not in st.session_state:
     st.session_state.backend = os.getenv("LLM_BACKEND", "gemini")
-if "use_hyde" not in st.session_state:
-    st.session_state.use_hyde = False
-if "use_decomposition" not in st.session_state:
-    st.session_state.use_decomposition = False
-if "last_query_latency" not in st.session_state:
-    st.session_state.last_query_latency = 0.0
 if "ingested_docs" not in st.session_state:
     st.session_state.ingested_docs = {}
-    # Populate initial from vector store if available
-    for doc in vector_store.get_all_doc_names():
+    for doc in get_all_doc_names():
         st.session_state.ingested_docs[doc] = {
-            "chunks": "Loaded from disk",
+            "chunks": "Disk",
             "timestamp": "Pre-existing"
         }
+if "last_latency" not in st.session_state:
+    st.session_state.last_latency = 0.0
+if "index_initialized" not in st.session_state:
+    st.session_state.index_initialized = False
 
-def render_source_cards(results: list[RetrievedChunk]):
-    st.markdown("**📎 Sources:**")
-    for i, rc in enumerate(results, start=1):
-        with st.expander(
-            f"[{i}] {rc.chunk.doc_name} — Page {rc.chunk.page_number} "
-            f"(score: {rc.reranker_score:.3f})"
-        ):
-            st.markdown(f"**Document:** {rc.chunk.doc_name}")
-            st.markdown(f"**Page:** {rc.chunk.page_number}")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Reranker", f"{rc.reranker_score:.3f}")
-            col2.metric("FAISS", f"{rc.faiss_score:.3f}")
-            col3.metric("BM25", f"{rc.bm25_score:.3f}")
-            st.divider()
-            st.caption("Relevant passage:")
-            st.markdown(f"> {rc.chunk.text[:500]}...")
+# ─── INJECT CSS ─────────────────────────────────────────
 
-# ─── SIDEBAR ────────────────────────────────────────────
-with st.sidebar:
-    st.header("📁 Document Management")
-    uploaded_files = st.file_uploader("Upload Files", type=["pdf", "docx", "txt"], accept_multiple_files=True, key="uploaded_files")
-    url_input = st.text_input("Ingest Website URL")
-    
-    if st.button("⚙️ Ingest Documents"):
-        if not uploaded_files and not url_input.strip():
-            st.warning("Please upload files or provide a URL.")
-        else:
-            progress_bar = st.progress(0)
-            total_items = len(uploaded_files) + (1 if url_input.strip() else 0)
-            all_chunks = []
-            
-            # Process uploaded files
-            for idx, file in enumerate(uploaded_files):
-                try:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        static_dir = Path("static")
-                        static_dir.mkdir(exist_ok=True)
-                        file_bytes = file.read()
-                        
-                        tmp_path = Path(tmpdir) / file.name
-                        tmp_path.write_bytes(file_bytes)
-                        
-                        static_path = static_dir / file.name
-                        static_path.write_bytes(file_bytes)
-                        
-                        chunks = ingestion.ingest_file(tmp_path)
-                        all_chunks.extend(chunks)
-                    
-                    st.session_state.ingested_docs[file.name] = {
-                        "chunks": len(chunks),
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                except Exception as e:
-                    st.error(f"Error processing {file.name}: {e}")
-                progress_bar.progress((idx + 1) / total_items)
-            
-            # Process URL
-            if url_input.strip():
-                try:
-                    chunks = ingestion.ingest_url(url_input.strip())
-                    all_chunks.extend(chunks)
-                    st.session_state.ingested_docs[url_input.strip()] = {
-                        "chunks": len(chunks),
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                except Exception as e:
-                    st.error(f"Error processing URL: {e}")
-                progress_bar.progress(1.0)
-                
-            if all_chunks:
-                try:
-                    vector_store.add_chunks(all_chunks)
-                    st.success(f"Successfully indexed {len(all_chunks)} chunks!")
-                except Exception as e:
-                    st.error(f"Error updating vector store: {e}")
-                    
-    st.header("📚 Indexed Documents")
-    if not st.session_state.ingested_docs:
-        st.info("No documents indexed yet.")
+st.markdown(
+  f"<style>{get_css(st.session_state.dark_mode)}</style>",
+  unsafe_allow_html=True
+)
+
+# ─── INITIALIZE VECTOR STORE ────────────────────────────
+
+if not st.session_state.index_initialized:
+    index_dir = Path(os.getenv("INDEX_DIR","data/indexes"))
+    index_dir.mkdir(parents=True, exist_ok=True)
+    initialize(index_dir)
+    st.session_state.index_initialized = True
+
+# ═══════════════════════════════════
+# SIDEBAR LAYOUT
+# ═══════════════════════════════════
+
+# ─── TOP: LOGO + DARK MODE TOGGLE ───────────────────────
+
+st.sidebar.markdown("""
+<div style="
+  background: linear-gradient(135deg, 
+    var(--accent-primary), var(--accent-secondary));
+  padding: 20px 20px 16px;
+  margin: -1rem -1rem 0;
+">
+  <div style="
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    color: white;
+    letter-spacing: -0.3px;
+  ">AskMyPDF</div>
+  <div style="
+    font-size: 11px;
+    color: rgba(255,255,255,0.75);
+    margin-top: 2px;
+    font-family: 'DM Sans', sans-serif;
+  ">Your documents. Your answers.</div>
+</div>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.sidebar.columns([3,1])
+col1.markdown('<div class="sidebar-label" style="margin-top:16px;">APPEARANCE</div>', unsafe_allow_html=True)
+dark_toggle = col2.toggle("🌙", 
+  value=st.session_state.dark_mode,
+  key="dark_toggle",
+  label_visibility="collapsed")
+
+if dark_toggle != st.session_state.dark_mode:
+    st.session_state.dark_mode = dark_toggle
+    st.rerun()
+
+# ─── SECTION: UPLOAD ────────────────────────────────────
+
+st.sidebar.markdown(
+  '<div class="sidebar-label" style="margin-top:16px;">DOCUMENTS</div>',
+  unsafe_allow_html=True
+)
+
+uploaded_files = st.sidebar.file_uploader(
+  "Upload PDFs",
+  type=["pdf", "docx", "txt"],
+  accept_multiple_files=True,
+  label_visibility="collapsed"
+)
+
+ingest_btn = st.sidebar.button(
+  "⚙️  Ingest Documents",
+  use_container_width=True,
+  type="primary",
+  disabled=(not uploaded_files)
+)
+
+if ingest_btn and uploaded_files:
+    progress = st.sidebar.progress(0, "Starting...")
+    all_new_chunks = []
+    for i, f in enumerate(uploaded_files):
+        doc_name = Path(f.name).stem
+        progress.progress(
+          (i / len(uploaded_files)),
+          f"Processing {doc_name}..."
+        )
+        suffix = Path(f.name).suffix
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(f.read())
+            tmp_path = Path(tmp.name)
+        try:
+            chunks = ingest_pdf(tmp_path)
+            all_new_chunks.extend(chunks)
+            st.session_state.ingested_docs[doc_name] = {
+                "chunks": len(chunks),
+                "timestamp": datetime.datetime.now().strftime("%H:%M %d %b")
+            }
+        except Exception as e:
+            st.sidebar.error(f"Failed: {doc_name} — {e}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+  
+    if all_new_chunks:
+        add_chunks(all_new_chunks)
+        progress.progress(1.0, "Complete!")
+        st.sidebar.success(
+            f"✓ {len(all_new_chunks)} chunks indexed "
+            f"from {len(uploaded_files)} file(s)"
+        )
+        st.rerun()
+
+# ─── SECTION: INDEXED DOCS ──────────────────────────────
+
+if st.session_state.ingested_docs:
+    st.sidebar.markdown(
+      '<div class="sidebar-label" style="margin-top:16px;">INDEXED</div>',
+      unsafe_allow_html=True
+    )
+  
+    for doc_name, info in st.session_state.ingested_docs.items():
+        st.sidebar.markdown(f"""
+        <div class="doc-card fade-in">
+          <div class="doc-card-title">📄 {doc_name}</div>
+          <div class="doc-card-meta">
+            {info['chunks']} chunks · {info['timestamp']}
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+  
+    if len(st.session_state.ingested_docs) > 0:
+        clear_btn = st.sidebar.button(
+          "🗑️  Clear All",
+          use_container_width=True,
+          type="secondary"
+        )
+        if clear_btn:
+            clear()
+            st.session_state.ingested_docs = {}
+            st.session_state.messages = []
+            st.session_state.memory.clear()
+            st.rerun()
+
+# ─── SECTION: BACKEND ───────────────────────────────────
+
+st.sidebar.divider()
+st.sidebar.markdown(
+  '<div class="sidebar-label">LLM BACKEND</div>',
+  unsafe_allow_html=True
+)
+
+backend_icons = {
+  "gemini": "✦ Gemini Flash",
+  "hf": "🤗 HuggingFace",
+  "ollama": "⬡ Ollama (Offline)"
+}
+
+selected = st.sidebar.radio(
+  "Backend",
+  options=list(backend_icons.keys()),
+  format_func=lambda x: backend_icons[x],
+  index=["gemini","hf","ollama"].index(st.session_state.backend) if st.session_state.backend in ["gemini","hf","ollama"] else 0,
+  label_visibility="collapsed"
+)
+st.session_state.backend = selected
+
+# ─── SECTION: SYSTEM MONITOR ────────────────────────────
+
+st.sidebar.divider()
+st.sidebar.markdown(
+  '<div class="sidebar-label">SYSTEM</div>',
+  unsafe_allow_html=True
+)
+
+stats = get_stats()
+c1, c2, c3 = st.sidebar.columns(3)
+c1.metric("CPU", f"{stats.cpu_percent:.0f}%")
+c2.metric("RAM", f"{stats.ram_used_mb:.0f}m")
+c3.metric("⏱", f"{st.session_state.last_latency:.1f}s")
+
+# ═══════════════════════════════════
+# MAIN AREA LAYOUT
+# ═══════════════════════════════════
+
+# ─── TOP BAR ────────────────────────────────────────────
+
+top_left, top_right = st.columns([5, 1])
+
+with top_left:
+    if get_chunk_count() > 0:
+        st.markdown(
+          f'<div style="font-family:\'DM Serif Display\',serif;'
+          f'font-size:28px;color:var(--text-primary);">'
+          f'Research Workspace</div>'
+          f'<div style="font-size:13px;color:var(--text-muted);'
+          f'margin-top:2px;">'
+          f'{len(st.session_state.ingested_docs)} document(s) · '
+          f'{get_chunk_count()} indexed chunks</div>',
+          unsafe_allow_html=True
+        )
     else:
-        df_data = []
-        for doc, info in st.session_state.ingested_docs.items():
-            df_data.append({
-                "Document": doc,
-                "Chunks": info["chunks"],
-                "Ingested At": info["timestamp"]
-            })
-        st.dataframe(df_data, use_container_width=True)
-        
-    if st.button("🗑️ Clear All Documents"):
-        vector_store.clear()
-        st.session_state.ingested_docs = {}
-        st.success("Vector store cleared.")
-        
-    st.header("🤖 LLM Backend")
-    st.session_state.backend = st.radio(
-        "Select Backend:",
-        ["gemini", "hf", "ollama"],
-        index=["gemini", "hf", "ollama"].index(st.session_state.backend) if st.session_state.backend in ["gemini", "hf", "ollama"] else 0
-    )
-    
-    st.header("🧠 Advanced Retrieval")
-    st.session_state.use_hyde = st.toggle(
-        "Enable HyDE (Hypothetical Embeddings)", 
-        value=st.session_state.use_hyde, 
-        help="Improves semantic search by asking the LLM to hallucinate a plausible answer first, and then searching the vector DB for it."
-    )
-    st.session_state.use_decomposition = st.toggle(
-        "Enable Query Decomposition", 
-        value=st.session_state.use_decomposition, 
-        help="Breaks complex questions into multiple sub-queries to retrieve a broader set of relevant context."
-    )
-    
-    st.header("🎤 Voice Interface")
-    if hasattr(st, "audio_input"):
-        voice_query_audio = st.audio_input("Record a voice query")
-        if voice_query_audio is not None:
-            if st.session_state.get("last_voice_audio") != voice_query_audio:
-                with st.spinner("Transcribing voice via Whisper..."):
-                    import whisper
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                        f.write(voice_query_audio.getvalue())
-                        tmp_audio_path = f.name
-                    
-                    # Load Whisper model (base for speed)
-                    model = whisper.load_model("base")
-                    result = model.transcribe(tmp_audio_path)
-                    st.session_state.voice_query_text = result["text"].strip()
-                    st.session_state.last_voice_audio = voice_query_audio
-                    
-                    import os
-                    try:
-                        os.remove(tmp_audio_path)
-                    except Exception:
-                        pass
-    else:
-        st.info("Voice Input is not supported on this Streamlit version (upgrade required).")
-    
-    st.header("📊 System Monitor")
-    stats = get_stats()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("CPU", f"{stats.cpu_percent:.1f}%")
-    col2.metric("RAM", f"{stats.ram_used_mb:.0f} MB")
-    col3.metric("Latency", f"{st.session_state.last_query_latency:.2f}s")
-    st.caption(f"RAM: {stats.ram_used_mb:.0f}/{stats.ram_total_mb:.0f} MB total")
+        st.markdown(
+          '<div style="font-family:\'DM Serif Display\',serif;'
+          'font-size:28px;color:var(--text-primary);">'
+          'AskMyPDF</div>',
+          unsafe_allow_html=True
+        )
 
-# ─── MAIN AREA ──────────────────────────────────────────
+with top_right:
+    if st.session_state.messages:
+        clear_btn = st.button("Clear chat", type="secondary")
+        if clear_btn:
+            st.session_state.messages = []
+            st.session_state.memory.clear()
+            st.rerun()
+
+# ─── EMPTY STATE ────────────────────────────────────────
+
+if get_chunk_count() == 0 and not st.session_state.messages:
+  
+    st.markdown("""
+    <div class="empty-state fade-in">
+      <div class="empty-state-icon">📄</div>
+      <div class="empty-state-title">
+        No documents yet
+      </div>
+      <div class="empty-state-body">
+        Upload PDFs using the sidebar to get started. 
+        Ask questions, get cited answers, and explore 
+        your documents in conversation.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Show 3 example query chips as inspiration
+    st.markdown('<div style="text-align:center;'
+      'margin-top:24px;">', unsafe_allow_html=True)
+    
+    example_queries = [
+      "What are the key payment terms?",
+      "Summarize the liability clauses",
+      "When does this agreement terminate?"
+    ]
+    
+    cols = st.columns(3)
+    for i, q in enumerate(example_queries):
+        with cols[i]:
+            st.markdown(
+              f'<div style="background:var(--bg-card);'
+              f'border:1px solid var(--border);'
+              f'border-radius:10px;padding:12px 14px;'
+              f'text-align:center;font-size:13px;'
+              f'color:var(--text-secondary);'
+              f'font-style:italic;">"{q}"</div>',
+              unsafe_allow_html=True
+            )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════
+# HELPER — render_source_cards()
+# ═══════════════════════════════════
+
+def render_source_cards(results: list):
+    if not results: return
+    
+    st.markdown(
+      '<div style="margin-top:12px;margin-bottom:4px;'
+      'font-size:11px;text-transform:uppercase;'
+      'letter-spacing:0.08em;color:var(--text-muted);'
+      'font-family:\'DM Sans\',sans-serif;">'
+      '📎 Sources</div>',
+      unsafe_allow_html=True
+    )
+    
+    for i, result in enumerate(results):
+        chunk = result.chunk
+        excerpt = chunk.text[:280].replace('"', '\\"')
+        if len(chunk.text) > 280:
+            excerpt += "..."
+        
+        # Relevance bar: convert reranker score to 0-100%
+        # reranker scores typically -5 to +5, sigmoid-ish
+        # Clamp to 0-1: rel = max(0, min(1, (score+3)/6))
+        rel = max(0, min(1, (result.reranker_score + 3) / 6))
+        rel_pct = int(rel * 100)
+        rel_color = ("#1A7A6E" if rel > 0.6 
+                     else "#D4825A" if rel > 0.3 
+                     else "#9E9893")
+        
+        card_html = f"""
+        <div class="source-card fade-in">
+          <div class="source-card-header">
+            <span class="score-pill">{rel_pct}%</span>
+            {chunk.doc_name}
+            <span style="color:var(--text-muted);
+              margin-left:6px;">· p.{chunk.page_number}</span>
+          </div>
+          <div style="
+            display:flex;
+            align-items:center;
+            gap:8px;
+            margin:8px 0 10px;
+            font-size:11px;
+            font-family:'JetBrains Mono',monospace;
+            color:var(--text-muted);
+          ">
+            <span>FAISS {result.faiss_score:.3f}</span>
+            <span>·</span>
+            <span>BM25 {result.bm25_score:.3f}</span>
+            <span>·</span>
+            <span>Rerank {result.reranker_score:.3f}</span>
+          </div>
+          <div style="
+            height:3px;
+            background:var(--border);
+            border-radius:2px;
+            margin-bottom:10px;
+          ">
+            <div style="
+              height:100%;
+              width:{rel_pct}%;
+              background:{rel_color};
+              border-radius:2px;
+              transition:width 0.4s ease;
+            "></div>
+          </div>
+          <div class="source-excerpt">
+            {excerpt}
+          </div>
+        </div>
+        """
+        
+        st.markdown(card_html, unsafe_allow_html=True)
+
 col_chat, col_studio = st.columns([5, 3])
 
 with col_chat:
-    st.title("📄 AskMyPDF Chat")
-    st.caption("Chat with your multi-modal documents.")
+    # ─── CHAT HISTORY ───────────────────────────────────────
 
-    col_a, col_b = st.columns([1, 4])
-    with col_a:
-        if st.button("🧹 Clear Chat"):
-            st.session_state.messages = []
-            st.session_state.memory.clear()
-    with col_b:
-        st.caption(f"Documents: {len(st.session_state.ingested_docs)} | Chunks: {vector_store.get_chunk_count()}")
+    chat_container = st.container()
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if msg.get("audio"):
-                st.audio(msg["audio"], format="audio/mp3")
-            if msg["role"] == "assistant" and msg.get("sources"):
-                render_source_cards(msg["sources"])
+    with chat_container:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+                
+                if msg["role"] == "assistant" and msg.get("sources"):
+                    render_source_cards(msg["sources"])
 
-    query = st.chat_input("Ask a question about your docs...")
-    
-    if st.session_state.get("voice_query_text"):
-        query = st.session_state.voice_query_text
-        st.session_state.voice_query_text = None
+    # ─── CHAT INPUT ─────────────────────────────────────────
+
+    if get_chunk_count() > 0:
+        query = st.chat_input("Ask anything about your documents...")
+    else:
+        query = st.chat_input("Upload documents first to begin...", disabled=True)
 
     if query:
-        st.session_state.messages.append({"role": "user", "content": query, "sources": []})
+        st.session_state.messages.append({
+            "role": "user", "content": query, "sources": []
+        })
         
         with st.chat_message("user"):
             st.markdown(query)
-            
-        tracker = get_tracker()
-        tracker.start()
         
         with st.chat_message("assistant"):
-            try:
-                reranker_top_k = int(os.getenv("RERANKER_TOP_K", 5))
-                
-                with st.status("Processing query...", expanded=True) as status:
-                    if st.session_state.get("use_decomposition"):
-                        status.write("Decomposing complex query...")
-                        sub_queries = generator.decompose_query(query, st.session_state.backend)
-                        if len(sub_queries) > 1:
-                            status.write(f"Generated {len(sub_queries)} sub-queries.")
-                            for sq in sub_queries:
-                                status.write(f"- {sq}")
-                        else:
-                            status.write("Query is straightforward, using as-is.")
-                            
-                        all_results = []
-                        seen_chunk_ids = set()
-                        
-                        for sq in sub_queries:
-                            status.write(f"Searching for: *{sq}*")
-                            sq_results = retrieve(sq, reranker_top_k=reranker_top_k, use_hyde=st.session_state.use_hyde)
-                            for rc in sq_results:
-                                if rc.chunk.chunk_id not in seen_chunk_ids:
-                                    seen_chunk_ids.add(rc.chunk.chunk_id)
-                                    all_results.append(rc)
-                        
-                        all_results.sort(key=lambda x: x.reranker_score, reverse=True)
-                        results = all_results[:10]
-                    else:
-                        status.write("Searching documents...")
-                        results = retrieve(query, reranker_top_k=reranker_top_k, use_hyde=st.session_state.use_hyde)
-                        
-                    status.write("Generating final answer...")
-                    answer = generate(query, results, st.session_state.memory, backend=st.session_state.backend)
-                    status.update(label="Response Generated", state="complete", expanded=False)
-                    
-                st.session_state.memory.add_user(query)
-                st.session_state.memory.add_assistant(answer)
-                
-                # Generate TTS audio using pyttsx3 (local offline TTS)
-                audio_bytes = None
+            with st.spinner(""):
+                tracker = get_tracker()
+                tracker.start()
                 try:
-                    import pyttsx3
-                    import tempfile
-                    import os
-                    clean_text = answer.replace("*", "").replace("#", "").replace("_", "")
+                    results = retrieve(
+                        query,
+                        reranker_top_k=int(os.getenv("RERANKER_TOP_K", 5))
+                    )
+                    answer = generate(
+                        query, results,
+                        st.session_state.memory,
+                        backend=st.session_state.backend
+                    )
+                    latency = tracker.stop()
+                    st.session_state.last_latency = latency
                     
-                    engine = pyttsx3.init()
-                    engine.setProperty('rate', 150) # Standard talking speed
+                    st.session_state.memory.add_user(query)
+                    st.session_state.memory.add_assistant(answer)
                     
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-                        tmp_path = tmp_file.name
-                        
-                    engine.save_to_file(clean_text, tmp_path)
-                    engine.runAndWait()
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "sources": results
+                    })
                     
-                    with open(tmp_path, "rb") as f:
-                        audio_bytes = f.read()
-                        
-                    try:
-                        os.remove(tmp_path)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    print(f"pyttsx3 TTS Error: {e}")
-                
-                latency = tracker.stop()
-                st.session_state.last_query_latency = latency
-                
-                st.markdown(answer)
-                if audio_bytes:
-                    st.audio(audio_bytes, format="audio/mp3")
-                if results:
+                    st.markdown(answer)
                     render_source_cards(results)
                     
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": answer, 
-                    "sources": results,
-                    "audio": audio_bytes
-                })
-                
-                st.rerun()
-                    
-            except ValueError as e:
-                st.warning(str(e))
-                tracker.stop()
-            except Exception as e:
-                st.error(f"Error: {e}")
-                tracker.stop()
+                except ValueError as e:
+                    st.warning(str(e))
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": str(e),
+                        "sources": []
+                    })
+                except Exception as e:
+                    st.error(f"Something went wrong: {e}")
+        
+        st.rerun()
+
 
 with col_studio:
-    st.title("🎨 Studio")
-    st.caption("AI Generated Assets")
+    st.markdown(
+      f'<div style="font-family:\'DM Serif Display\',serif;'
+      f'font-size:28px;color:var(--text-primary);">'
+      f'Studio</div>'
+      f'<div style="font-size:13px;color:var(--text-muted);'
+      f'margin-top:2px;">'
+      f'AI Generated Assets</div>',
+      unsafe_allow_html=True
+    )
     
-    tab_audio, tab_slide, tab_video, tab_mindmap, tab_report, tab_flashcard, tab_quiz, tab_info, tab_data = st.tabs([
-        "Audio", "Slides", "Video", "Mind Map", "Reports", "Flashcards", "Quiz", "Infographics", "Data"
+    tab_audio, tab_slide, tab_mindmap, tab_report, tab_flashcard, tab_quiz, tab_info, tab_data = st.tabs([
+        "Audio", "Slides", "Mind Map", "Reports", "Flashcards", "Quiz", "Infographics", "Data"
     ])
     
     with tab_audio:
@@ -578,28 +566,6 @@ with col_studio:
                         
         if "pptx_io" in st.session_state:
             st.download_button("📥 Download Presentation (.pptx)", data=st.session_state["pptx_io"], file_name="AskMyPDF_Deck.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-
-    with tab_video:
-        st.subheader("Animated Video Overview")
-        avatar_style = st.selectbox("Select Avatar:", ["Daisy-in-Tshirt", "Tyler-in-Suit", "Anna_public_3_20240108"])
-        if st.button("🎬 Generate Animated Video Overview"):
-            if not st.session_state.ingested_docs:
-                st.warning("Please index documents first.")
-            else:
-                with st.spinner("Writing video script..."):
-                    try:
-                        results = retrieve("Extract main topics for a 60-second video overview.", reranker_top_k=20)
-                        script_text = generator.generate_video_script(results, st.session_state.backend)
-                        
-                        st.info("Sending to Video API (HeyGen). This may take a few minutes...")
-                        video_url = generator.generate_video(script_text, avatar_style)
-                        st.session_state["video_url"] = video_url
-                        st.success("Video generated!")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                        
-        if "video_url" in st.session_state:
-            st.video(st.session_state["video_url"])
         
     with tab_mindmap:
         st.subheader("Interactive Knowledge Graph")
