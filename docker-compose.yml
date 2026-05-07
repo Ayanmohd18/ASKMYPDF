@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: askmypdf_app
+    ports:
+      - "8501:8501"
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data/indexes:/app/data/indexes
+      - ./static:/app/static
+    restart: always
+
+  redis:
+    image: "redis:alpine"
+    container_name: askmypdf_redis
+    ports:
+      - "6379:6379"
