@@ -404,5 +404,180 @@ hr {{
   font-family: 'DM Sans', sans-serif;
   font-size: 1.1em;
 }}
+
+/* Studio Module Styles */
+.studio-doc-title {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 28px;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin-bottom: 4px;
+}}
+.studio-doc-subtitle {{
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 24px;
+}}
+.exec-summary-box {{
+  background: var(--source-card-bg);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: 0 10px 10px 0;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}}
+.exec-summary-label {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-primary);
+  margin-bottom: 8px;
+}}
+.exec-summary-text {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  font-style: italic;
+}}
+.key-fact-card {{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 10px;
+  min-height: 90px;
+}}
+.key-fact-text {{
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}}
+.key-fact-source {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--accent-primary);
+}}
+.conflict-card {{
+  background: rgba(229,62,62,0.06);
+  border: 1px solid rgba(229,62,62,0.3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}}
+.slide-card {{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-md);
+  min-height: 220px;
+}}
+.slide-header {{
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}}
+.slide-number {{
+  color: rgba(255,255,255,0.6);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}}
+.slide-type-badge {{
+  color: white;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}}
+.slide-body {{
+  padding: 20px 24px;
+}}
+.slide-stat-number {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 64px;
+  color: var(--accent-primary);
+  line-height: 1;
+}}
+.slide-stat-label {{
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 8px 0 4px;
+}}
+.slide-stat-context {{
+  font-size: 13px;
+  color: var(--text-secondary);
+}}
+.slide-quote-mark {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 80px;
+  color: var(--accent-primary);
+  line-height: 0.6;
+  margin-bottom: 8px;
+  opacity: 0.4;
+}}
+.slide-quote-text {{
+  font-family: 'DM Serif Display', serif;
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}}
+.hero-stat-card {{
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}}
+.hero-number {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 80px;
+  color: var(--accent-primary);
+  line-height: 1;
+}}
+.hero-label {{
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 12px 0 8px;
+}}
+.hero-context {{
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 400px;
+  margin: 0 auto;
+  line-height: 1.6;
+}}
+.hero-citation {{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent-primary);
+  margin-top: 12px;
+}}
+.infographic-header {{
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 20px;
+}}
+.infographic-title {{
+  font-family: 'DM Serif Display', serif;
+  font-size: 26px;
+  color: white;
+  margin-bottom: 4px;
+}}
+.infographic-subtitle {{
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  font-family: 'DM Sans', sans-serif;
+}}
 """
     return css

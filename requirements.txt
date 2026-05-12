@@ -22,3 +22,6 @@ pyttsx3
 fastapi
 uvicorn
 python-pptx
+pandas
+markdown
+xhtml2pdf

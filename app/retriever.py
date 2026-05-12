@@ -178,11 +178,12 @@ def retrieve(
         # Re-sort after boosting
         rrf_results.sort(key=lambda x: x.rrf_score, reverse=True)
     
-    # 5. Take top-10 for reranking (hardcoded to 10 in spec)
-    top10_candidates = rrf_results[:10]
+    # 5. Take top candidates for reranking (flexible based on requested top_k)
+    num_candidates = max(20, env_reranker_top_k * 2)
+    top_candidates = rrf_results[:num_candidates]
     
-    # 6. Rerank top 10
-    final_results = rerank(query, top10_candidates, env_reranker_top_k)
+    # 6. Rerank top candidates
+    final_results = rerank(query, top_candidates, env_reranker_top_k)
     
     # 7. Return final list
     return final_results
