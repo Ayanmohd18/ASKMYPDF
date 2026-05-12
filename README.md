@@ -1,57 +1,71 @@
-# AskMyPDF — Enterprise RAG Document Intelligence Platform
+# AskMyPDF — Scholarly Research & Document Intelligence 🖋️
 
-AskMyPDF is a production-grade Retrieval-Augmented Generation (RAG) system that transforms static PDF document repositories into conversational knowledge bases.
+![AskMyPDF Hero](static/hero.png)
 
-## Phase 1 Setup Instructions
+AskMyPDF is a premium, production-grade Retrieval-Augmented Generation (RAG) platform designed for researchers, students, and professionals. It transforms static PDF repositories into a dynamic, conversational workspace with a focus on **Scholarly Precision** and high-trust citations.
 
-1. Clone and install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Inspired by the clean, sophisticated aesthetic of Google NotebookLM, AskMyPDF combines state-of-the-art LLM reasoning with a powerful "Studio" suite for content synthesis.
 
-2. Configure the environment:
-   ```bash
-   cp .env.example .env
-   # Fill in your API keys in the .env file
-   ```
+## ✨ Key Features
 
-3. Run the ingestion test suite to verify the setup:
-   ```bash
-   pytest tests/test_ingestion.py -v
-   ```
+### 🏛️ Scholarly Precision UI
+- **Dual-Pane Workspace**: Seamlessly switch between conversational analysis and structured document views.
+- **Deep Citations**: Every claim is backed by a "Source Card" linking directly to the specific page and passage in your original documents.
+- **Serif-First Design**: A professional, high-trust visual language tailored for deep focus and academic research.
 
-### Expected Output
-When the tests complete successfully, you should see output similar to this:
-```text
-============================= test session starts ==============================
-...
-tests/test_ingestion.py::test_extract_pages PASSED                       [ 25%]
-tests/test_ingestion.py::test_semantic_chunk_fields PASSED               [ 50%]
-tests/test_ingestion.py::test_chunk_token_limit PASSED                   [ 75%]
-tests/test_ingestion.py::test_ingest_multiple PASSED                     [100%]
+### 🎙️ The Studio Module
+Beyond chat, the Studio allows you to synthesize knowledge into various formats:
+- **Audio Overview**: Generate a two-host podcast-style conversation discussing your documents (powered by ElevenLabs or Browser TTS).
+- **Interactive Mindmaps**: Visualize complex relationships between concepts across your entire corpus.
+- **Auto-Generated Presentations**: Instantly create professional `.pptx` slide decks from your research.
+- **Briefing Docs & Data Tables**: Extract structured insights and summaries with high fidelity.
 
-============================== 4 passed in 2.34s ===============================
+### 🧠 Advanced RAG Engine
+- **Multi-Stage Retrieval**: Combines semantic search with cross-encoder reranking for maximum relevance.
+- **Context-Aware Memory**: Remembers your line of questioning to provide coherent, multi-turn answers.
+- **Hybrid Backend**: Support for **Google Gemini 1.5 Pro** for massive context windows, or **Ollama** (Mistral/Llama3) for full local privacy.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+Clone the repository and install dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
-## Running the App
+### 2. Environment Setup
+Create a `.env` file from the example:
+```bash
+cp .env.example .env
+```
+Fill in your API keys (Google Gemini, ElevenLabs, etc.) in the `.env` file.
 
-Local (no Docker):
-  ```bash
-  cp .env.example .env
-  # Fill in your GEMINI_API_KEY or other backend keys
-  pip install -r requirements.txt
-  streamlit run app/main.py
-  ```
+### 3. Launch the Application
+```bash
+streamlit run app/main.py
+```
 
-Expected UI behavior:
-  - Upload one or more PDFs using the sidebar
-  - Click "Ingest Documents" and wait for completion
-  - Type a question in the chat input
-  - Answer appears with source cards showing document name, page, and passage
+---
 
-Offline mode with Ollama:
-  1. Install Ollama: https://ollama.ai
-  2. `ollama pull mistral`
-  3. `ollama serve` (keep running in background)
-  4. In `.env`: set `LLM_BACKEND=ollama`
-  5. `streamlit run app/main.py`
+## 🛠️ Tech Stack
+- **Frontend**: Streamlit with Custom CSS (Scholarly Precision System)
+- **RAG Engine**: LangChain / Custom Semantic Chunking
+- **Vector Store**: FAISS
+- **Models**: Gemini 1.5 Pro, GPT-4o, or Local Ollama
+- **Audio**: ElevenLabs API / Browser SpeechSynthesis
+- **Mindmaps**: D3.js Integration
+
+---
+
+## 📦 Docker Support
+Run the entire stack with Docker Compose:
+```bash
+docker-compose up --build
+```
+
+---
+
+## 📜 License
+MIT License. Created by [Ayanmohd18](https://github.com/Ayanmohd18).
